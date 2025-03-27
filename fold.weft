@@ -1,0 +1,28 @@
+fold:
+	apply-and-loop:
+		{list accum fn -- list accum fn list} head
+		{list accum fn head -- list fn accum head fn} eval
+		{list fn accum -- fn accum list} tail
+		{fn accum tail -- tail accum fn} fold
+	end-loop:
+		{list accum fn -- accum}
+	is-list-empty:
+		{list accum fn -- list accum fn list} [] =
+	is-list-empty [end-loop] [apply-and-loop] if-else
+sum:
+	0 [+] fold
+map:
+	is-list-empty:
+		{list fn -- list fn list} [] =
+	apply-and-loop:
+		map-head:
+			{list fn -- list fn list} head
+			{fn head -- fn head fn} eval
+		map-tail:
+			{list fn head -- fn head list} tail
+			{fn head list -- head list fn} map
+		map-head map-tail cons
+	end-loop:
+		{list fn -- list}
+	is-list-empty [end-loop] [apply-and-loop] if-else
+[[1 2 3] [4 5 6] [7 8 9]] [sum] map
