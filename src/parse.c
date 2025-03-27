@@ -402,11 +402,7 @@ static void handle_list_close(Weft_ParseState *P, const char *at)
 	Weft_List *list = P->list;
 	P->list_stack = buf_pop(P->list_stack, &P->list, sizeof(Weft_List *));
 	P->node = list_end(P->list);
-
-	if (list && !list_cdr(list) && data_type(list_car(list)) == WEFT_DATA_FN
-	    && !fn_is_builtin(data_ptr(list_car(list)))) {
-		list = fn_ptr(data_ptr(list_car(list)));
-	}
+	
 	output_data(P, data_tag_ptr(WEFT_DATA_LIST, list));
 	P->nest -= 1;
 }
