@@ -22,10 +22,10 @@ static bool is_utf8(unsigned char c)
 	    || ((c & UTF8_3MASK) == UTF8_3BYTE) || ((c & UTF8_4MASK) == UTF8_4BYTE);
 }
 
-bool char_is_printable(char c)
+bool char_is_printable(unsigned char c)
 {
 	if (!c || isspace(c) || !isgraph(c)) {
-		if (c == ' ' || is_utf8(c)) {
+		if (c == ' ') {
 			return true;
 		}
 		return false;
@@ -33,7 +33,7 @@ bool char_is_printable(char c)
 	return true;
 }
 
-Weft_Str *char_stringify(char c)
+Weft_Str *char_stringify(unsigned char c)
 {
 	if (c == '\'') {
 		return new_str_from_n(str_and_len_of("'\\\''"));
@@ -45,7 +45,7 @@ Weft_Str *char_stringify(char c)
 	}
 }
 
-Weft_Str *char_stringify_esc(char c)
+Weft_Str *char_stringify_esc(unsigned char c)
 {
 	switch (c) {
 	case '\a':
@@ -67,11 +67,35 @@ Weft_Str *char_stringify_esc(char c)
 	case '\\':
 		return new_str_from_n(str_and_len_of("\\\\"));
 	default:
-		return str_printf("\\%#2x", c);
+		return str_printf("\\x%.2x", c);
 	}
 }
 
-bool char_is_equal(char left, char right)
+unsigned char char_get_esc(unsigned char c)
+{
+	switch (c) {
+	case 'a':
+		return '\a';
+	case 'b':
+		return '\b';
+	case 'e':
+		return '\e';
+	case 'f':
+		return '\f';
+	case 'n':
+		return '\n';
+	case 'r':
+		return '\r';
+	case 't':
+		return '\t';
+	case 'v':
+		return '\v';
+	default:
+		return c;
+	}
+}
+
+bool char_is_equal(unsigned char left, unsigned char right)
 {
 	return left == right;
 }

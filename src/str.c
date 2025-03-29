@@ -96,6 +96,10 @@ static size_t get_print_span(const char *src)
 
 Weft_Str *str_stringify(const Weft_Str *str)
 {
+	if (!str) {
+		return new_str_from_n(str_and_len_of("\"\""));
+	}
+
 	Weft_Str *output = NULL;
 	const char *src = str->c;
 

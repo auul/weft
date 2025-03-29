@@ -262,6 +262,20 @@ bool bi_if_else(Weft_EvalState *W)
 	}
 }
 
+bool bi_dot(Weft_EvalState *W)
+{
+	if (eval_get_stack_size(W) < 1) {
+		return error_msg("[A] . :=");
+	}
+
+	Weft_Data a = eval_pop_stack(W);
+
+	data_print(a);
+	printf("\n");
+
+	return true;
+}
+
 static Weft_Map *
 new_bi(Weft_Map *map, const char *name, bool (*builtin)(Weft_EvalState *))
 {
@@ -288,6 +302,7 @@ Weft_Map *bi_init(void)
 	map = new_bi(map, "cat", bi_cat);
 	map = new_bi(map, "eval", bi_eval);
 	map = new_bi(map, "if-else", bi_if_else);
+	map = new_bi(map, ".", bi_dot);
 
 	return map;
 }

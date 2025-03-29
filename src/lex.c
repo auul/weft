@@ -1,9 +1,14 @@
 #include "lex.h"
+#include "buf.h"
+#include "char.h"
 #include "error.h"
+#include "str.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Constants
@@ -34,9 +39,37 @@ static Weft_Lex tag_empty(const char *src, size_t len)
 	return tag_lex(src, len, WEFT_LEX_EMPTY);
 }
 
-static Weft_Lex tag_num(const char *src, size_t len)
+static Weft_Lex tag_num(const char *src, size_t len, double num)
 {
-	return tag_lex(src, len, WEFT_LEX_NUM);
+	Weft_Lex lex = {
+		.src = src,
+		.len = len,
+		.type = WEFT_LEX_NUM,
+		.num = num,
+	};
+	return lex;
+}
+
+static Weft_Lex tag_char(const char *src, size_t len, unsigned char c)
+{
+	Weft_Lex lex = {
+		.src = src,
+		.len = len,
+		.type = WEFT_LEX_CHAR,
+		.c = c,
+	};
+	return lex;
+}
+
+static Weft_Lex tag_str(const char *src, size_t len, Weft_Str *str)
+{
+	Weft_Lex lex = {
+		.src = src,
+		.len = len,
+		.type = WEFT_LEX_STR,
+		.str = str,
+	};
+	return lex;
 }
 
 bool lex_is_line_empty(const char *src)
@@ -115,12 +148,20 @@ static bool is_num(const char *src)
 
 Weft_Lex lex_num(const char *path, const char *start, const char *src)
 {
-	size_t len = 0;
-	if (src[len] == '-') {
-		len++;
-	}
-
+	bool negative = false;
+	double left = 0.0;
+	double right = 0.0;
+	unsigned place = 0;
 	bool dot = false;
+
+	size_t len;
+	if (src[0] == '-') {
+		negative = true;
+		len = 1;
+	} else {
+		negative = false;
+		len = 0;
+	}
 
 	while (src[len] == '.' || isdigit(src[len])) {
 		if (src[len] == '.') {
@@ -129,6 +170,11 @@ Weft_Lex lex_num(const char *path, const char *start, const char *src)
 					path, start, src + len, 1, "Extra . in number literal");
 			}
 			dot = true;
+		} else if (dot) {
+			right = (10.0 * right) + (double)(src[len] - '0');
+			place++;
+		} else {
+			left = (10.0 * left) + (double)(src[len] - '0');
 		}
 		len++;
 	}
@@ -146,7 +192,202 @@ Weft_Lex lex_num(const char *path, const char *start, const char *src)
 		            1,
 		            "At least one digit expected after '.'");
 	}
-	return tag_num(src, len);
+
+	while (place) {
+		right /= 10.0;
+		place--;
+	}
+
+	if (negative) {
+		return tag_num(src, len, -(left + right));
+	}
+	return tag_num(src, len, left + right);
+}
+
+static bool is_char(const char *src)
+{
+	return src[0] == '\'';
+}
+
+static bool is_hex_esc(const char *src)
+{
+	return src[0] == '\\' && (src[1] == 'x' || src[1] == 'X');
+}
+
+static bool is_nibble(char c)
+{
+	return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || isdigit(c);
+}
+
+static unsigned get_nibble(char c)
+{
+	if (c >= 'a' && c <= 'f') {
+		return c - 'a' + 10;
+	} else if (c >= 'A' && c <= 'F') {
+		return c - 'A' + 10;
+	}
+	return c - '0';
+}
+
+Weft_Lex lex_hex_esc(const char *path, const char *start, const char *src)
+{
+	size_t len = len_of("\\x");
+	if (!src[len]) {
+		return tag_char(src, len, 0);
+	} else if (!is_nibble(src[len])) {
+		error_parse(
+			path, start, src, len + 1, "Invalid value for hex char escape");
+		return tag_char(src, len + 1, 0);
+	}
+
+	unsigned value = get_nibble(src[len]);
+	len++;
+
+	if (is_nibble(src[len])) {
+		value = (value << 4) | get_nibble(src[len]);
+		len++;
+	}
+	return tag_char(src, len, value);
+}
+
+static bool is_decimal_esc(const char *src)
+{
+	return src[0] == '\\' && isdigit(src[1]);
+}
+
+static unsigned get_digit(char c)
+{
+	return c - '0';
+}
+
+static unsigned push_digit(unsigned value, char c)
+{
+	return (10 * value) + get_digit(c);
+}
+
+static Weft_Lex
+lex_decimal_esc(const char *path, const char *start, const char *src)
+{
+	size_t len = len_of("\\");
+	if (!src[len]) {
+		return tag_char(src, len, 0);
+	}
+
+	unsigned value = get_digit(src[len]);
+	len++;
+
+	if (isdigit(src[len])) {
+		value = push_digit(value, src[len]);
+		len++;
+	}
+
+	if (isdigit(src[len])) {
+		value = push_digit(value, src[len]);
+		len++;
+	}
+
+	if (value > UCHAR_MAX) {
+		error_parse(path,
+		            start,
+		            src,
+		            len,
+		            "Char escape literal exceeds max char value of %u",
+		            UCHAR_MAX);
+		value = 0;
+	}
+	return tag_char(src, len, value);
+}
+
+static bool is_char_esc(const char *src)
+{
+	return src[0] == '\\';
+}
+
+Weft_Lex lex_char_esc(const char *src)
+{
+	size_t len = len_of("\\");
+	if (!src[len]) {
+		return tag_char(src, len, 0);
+	}
+	return tag_char(src, len + 1, char_get_esc(src[len]));
+}
+
+static size_t get_char_esc_len(const char *src)
+{
+	size_t len = len_of("\\");
+	if (!src[len]) {
+		return len;
+	}
+	return len + 1;
+}
+
+Weft_Lex lex_char(const char *path, const char *start, const char *src)
+{
+	Weft_Lex ch;
+	size_t len = len_of("'");
+	if (is_hex_esc(src + len)) {
+		ch = lex_hex_esc(path, start, src + len);
+	} else if (is_decimal_esc(src + len)) {
+		ch = lex_decimal_esc(path, start, src + len);
+	} else if (is_char_esc(src + len)) {
+		ch = lex_char_esc(src + len);
+	} else if (src[len]) {
+		ch = tag_char(src + len, 1, src[len]);
+	}
+	len += ch.len;
+
+	if (!src[len]) {
+		error_parse(path, start, src, len, "Missing terminating ' character");
+		return tag_empty(src, len);
+	} else if (src[len] != '\'') {
+		error_parse(
+			path, start, src + len, 1, "Multi-character character constant");
+		while (src[len] && src[len] != '\'') {
+			len++;
+		}
+		if (src[len] == '\'') {
+			return tag_empty(src, len + len_of("'"));
+		}
+		return tag_empty(src, len);
+	}
+	return tag_char(src, len + len_of("'"), ch.c);
+}
+
+static bool is_str(const char *src)
+{
+	return src[0] == '"';
+}
+
+Weft_Lex lex_str(const char *path, const char *start, const char *src)
+{
+	size_t len = len_of("\"");
+	Weft_Buf *buf = new_buf(sizeof(char));
+
+	while (src[len] != '"') {
+		Weft_Lex ch;
+		if (!src[len]) {
+			free(buf);
+			error_parse(path, start, src, len, "Unclosed string literal");
+			return tag_str(src, len, NULL);
+		} else if (is_hex_esc(src + len)) {
+			ch = lex_hex_esc(path, start, src + len);
+		} else if (is_decimal_esc(src + len)) {
+			ch = lex_decimal_esc(path, start, src + len);
+		} else if (is_char_esc(src + len)) {
+			ch = lex_char_esc(src + len);
+		} else {
+			ch = tag_char(src + len, 1, src[len]);
+		}
+
+		buf_push(&buf, &ch.c, sizeof(char));
+		len += ch.len;
+	}
+	len += len_of("\"");
+
+	Weft_Str *str = new_str_from_n(buf_get_raw(buf), buf_get_at(buf));
+	free(buf);
+
+	return tag_str(src, len, str);
 }
 
 static bool is_quotation_open(const char *src)
@@ -211,6 +452,10 @@ Weft_Lex lex_token(const char *path, const char *start, const char *src)
 		return lex_indent(src);
 	} else if (is_num(src)) {
 		return lex_num(path, start, src);
+	} else if (is_char(src)) {
+		return lex_char(path, start, src);
+	} else if (is_str(src)) {
+		return lex_str(path, start, src);
 	} else if (is_quotation_open(src)) {
 		return lex_quotation_open(src);
 	} else if (is_quotation_close(src)) {

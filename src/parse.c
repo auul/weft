@@ -1,6 +1,7 @@
 #include "parse.h"
 #include "bi.h"
 #include "buf.h"
+#include "data.h"
 #include "error.h"
 #include "fn.h"
 #include "gc.h"
@@ -280,12 +281,6 @@ static void handle_indent(Weft_ParseState *P, size_t indent)
 	P->indent = indent;
 }
 
-static void handle_num(Weft_ParseState *P, const char *src, size_t len)
-{
-	char *end = (char *)src + len;
-	output_data(P, data_tag_num(strtod(src, &end)));
-}
-
 static void handle_list_open(Weft_ParseState *P, const char *src)
 {
 	if (P->shuffle_mode) {
@@ -401,7 +396,15 @@ Weft_List *parse(Weft_ParseState *P, const char *path, const char *src)
 			src += lex.len;
 			break;
 		case WEFT_LEX_NUM:
-			handle_num(P, lex.src, lex.len);
+			output_data(P, data_tag_num(lex.num));
+			src += lex.len;
+			break;
+		case WEFT_LEX_CHAR:
+			output_data(P, data_tag_char(lex.c));
+			src += lex.len;
+			break;
+		case WEFT_LEX_STR:
+			output_data(P, data_tag_ptr(WEFT_DATA_STR, lex.str));
 			src += lex.len;
 			break;
 		case WEFT_LEX_QUOTATION_OPEN:

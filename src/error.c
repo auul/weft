@@ -53,13 +53,22 @@ void error_parse(const char *path,
 	vfprintf(stderr, fmt, args);
 	va_end(args);
 
-	fprintf(stderr,
-	        "\n%5zu | %.*s\e[91m%.*s\e[0m%.*s\n",
-	        line_no,
-	        src - line,
-	        line,
-	        len,
-	        src,
-	        get_line_len(src + len),
-	        src + len);
+	fprintf(stderr, "\n%5zu | %.*s\e[91m", line_no, src - line, line);
+	while (len) {
+		if (*src == '\n') {
+			line_no++;
+			fprintf(stderr, "\e[0m\n%5zu | \e[91m", line_no);
+		} else {
+			fprintf(stderr, "%c", *src);
+		}
+		src++;
+		len--;
+	}
+
+	fprintf(stderr, "\e[0m");
+	while (*src && *src != '\n') {
+		fprintf(stderr, "%c", *src);
+		src++;
+	}
+	fprintf(stderr, "\n");
 }

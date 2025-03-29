@@ -34,7 +34,7 @@ Weft_Data data_tag_num(double num)
 	return data;
 }
 
-Weft_Data data_tag_char(char c)
+Weft_Data data_tag_char(unsigned char c)
 {
 	Weft_Data data = {
 		.type = WEFT_DATA_CHAR,

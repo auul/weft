@@ -31,7 +31,7 @@ struct weft_data {
 		void *ptr;
 		bool b;
 		double num;
-		char c;
+		unsigned char c;
 		Weft_Str *str;
 		Weft_List *list;
 		Weft_Fn *fn;
@@ -44,7 +44,7 @@ struct weft_data {
 Weft_Data data_nil();
 Weft_Data data_tag_bool(bool b);
 Weft_Data data_tag_num(double num);
-Weft_Data data_tag_char(char c);
+Weft_Data data_tag_char(unsigned char c);
 Weft_Data data_tag_ptr(Weft_DataType type, void *ptr);
 Weft_DataType data_get_type(const Weft_Data data);
 bool data_get_bool(const Weft_Data data);
